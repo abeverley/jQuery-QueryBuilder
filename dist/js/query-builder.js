@@ -412,20 +412,20 @@ QueryBuilder.prototype.bindEvents = function() {
     this.$el.on('change.queryBuilder', '.rules-group-header [name$=_cond]', function() {
         if ($(this).is(':checked')) {
             var $group = $(this).closest('.rules-group-container');
-            Model($group).condition = $(this).val();
+            Model($group).setCondition($(this).val());
         }
     });
 
     // rule filter change
     this.$el.on('change.queryBuilder', '.rule-filter-container [name$=_filter]', function() {
         var $rule = $(this).closest('.rule-container');
-        Model($rule).filter = that.getFilterById($(this).val());
+        Model($rule).setFilter(that.getFilterById($(this).val()));
     });
 
     // rule operator change
     this.$el.on('change.queryBuilder', '.rule-operator-container [name$=_operator]', function() {
         var $rule = $(this).closest('.rule-container');
-        Model($rule).operator = that.getOperatorByType($(this).val());
+        Model($rule).setOperator(that.getOperatorByType($(this).val()));
     });
 
     // add rule button
@@ -463,10 +463,10 @@ QueryBuilder.prototype.bindEvents = function() {
             node.$el.detach();
 
             if (index === 0) {
-                node.$el.prependTo(node.parent.$el.find('>.rules-group-body>.rules-list'));
+                node.$el.prependTo(node.getParent().$el.find('>.rules-group-body>.rules-list'));
             }
             else {
-                node.$el.insertAfter(node.parent.rules[index-1].$el);
+                node.$el.insertAfter(node.getParent().rules[index-1].$el);
             }
         },
         'update': function(e, node, field, value, oldValue) {
@@ -514,10 +514,10 @@ QueryBuilder.prototype.setRoot = function(addRule, data) {
     this.$el.append($group);
     this.model.root = new Group(null, $group);
     this.model.root.model = this.model;
-    this.model.root.condition = this.settings.default_condition;
+    this.model.root.setCondition(this.settings.default_condition);
 
     if (data !== undefined) {
-        this.model.root.data = data;
+        this.model.root.setData(data);
     }
 
     if (addRule) {
@@ -549,12 +549,12 @@ QueryBuilder.prototype.addGroup = function(parent, addRule, data) {
         model = parent.addGroup($group);
 
     if (data !== undefined) {
-        model.data = data;
+        model.setData(data);
     }
 
     this.trigger('afterAddGroup', model);
 
-    model.condition = this.settings.default_condition;
+    model.setCondition(this.settings.default_condition);
 
     if (addRule) {
         this.addRule(model);
@@ -625,7 +625,7 @@ QueryBuilder.prototype.addRule = function(parent, data) {
         model = parent.addRule($rule);
 
     if (data !== undefined) {
-        model.data = data;
+        model.setData(data);
     }
 
     this.trigger('afterAddRule', model);
@@ -688,7 +688,7 @@ QueryBuilder.prototype.createRuleOperators = function(rule) {
     $operatorContainer.html($operatorSelect);
 
     // set the operator without triggering update event
-    rule.__.operator = operators[0];
+    rule.operator = operators[0];
 
     this.trigger('afterCreateRuleOperators', rule, operators);
 };
@@ -700,7 +700,7 @@ QueryBuilder.prototype.createRuleOperators = function(rule) {
 QueryBuilder.prototype.createRuleInput = function(rule) {
     var $valueContainer = rule.$el.find('.rule-value-container').empty();
 
-    rule.__.value = undefined;
+    rule.value = undefined;
 
     if (!rule.filter || !rule.operator || rule.operator.nb_inputs === 0) {
         return;
@@ -760,7 +760,7 @@ QueryBuilder.prototype.updateRuleOperator = function(rule, previousOperator) {
     if (!rule.operator || rule.operator.nb_inputs === 0) {
         $valueContainer.hide();
 
-        rule.__.value = undefined;
+        rule.value = undefined;
     }
     else {
         $valueContainer.show();
@@ -1009,7 +1009,7 @@ QueryBuilder.prototype.getRules = function() {
         };
 
         if (group.data) {
-            data.data = $.extendext(true, 'replace', {}, group.data);
+            data.setData($.extendext(true, 'replace', {}, group.data));
         }
 
         group.each(function(model) {
@@ -1028,7 +1028,7 @@ QueryBuilder.prototype.getRules = function() {
             };
 
             if (model.filter.data || model.data) {
-                rule.data = $.extendext(true, 'replace', {}, model.filter.data, model.data);
+                rule.setData($.extendext(true, 'replace', {}, model.filter.data, model.data));
             }
 
             data.rules.push(rule);
@@ -1072,7 +1072,7 @@ QueryBuilder.prototype.setRules = function(data) {
             error('Invalid condition "{0}"', data.condition);
         }
 
-        group.condition = data.condition;
+        group.setCondition(data.condition);
 
         data.rules.forEach(function(item) {
             var model;
@@ -1091,7 +1091,7 @@ QueryBuilder.prototype.setRules = function(data) {
                     error('Missing rule field id');
                 }
                 if (item.operator === undefined) {
-                    item.operator = 'equal';
+                    item.setOperator('equal');
                 }
 
                 model = that.addRule(group, item.data);
@@ -1099,12 +1099,12 @@ QueryBuilder.prototype.setRules = function(data) {
                     return;
                 }
 
-                model.filter = that.getFilterById(item.id);
-                model.operator = that.getOperatorByType(item.operator);
-                model.flags = that.parseRuleFlags(item);
+                model.setFilter(that.getFilterById(item.id));
+                model.setOperator(that.getOperatorByType(item.operator));
+                model.setFlags(that.parseRuleFlags(item));
 
                 if (model.operator.nb_inputs !== 0 && item.value !== undefined) {
-                    model.value = item.value;
+                    model.setValue(item.value);
                 }
             }
         });
@@ -1805,28 +1805,24 @@ Model.getModel = function(el) {
 };
 
 /*
- * Define Node properties with getter and setter
+ * Define Node properties with setter (setXxxx)
+ * Direct access to node property is used to get value
  * Update events are emitted in the setter through root Model (if any)
  */
 function defineModelProperties(obj, fields) {
     fields.forEach(function(field) {
-        Object.defineProperty(obj.prototype, field, {
-            enumerable: true,
-            get: function() {
-                return this.__[field];
-            },
-            set: function(value) {
-                var oldValue = (this.__[field] !== null && typeof this.__[field] == 'object') ?
-                  $.extend({}, this.__[field]) :
-                  this.__[field];
+        var setf_name = "set" + field.charAt(0).toUpperCase() + field.slice(1);
+        obj.prototype[setf_name] = function(value) {
+            var oldValue = (this[field] !== null && typeof this[field] == 'object') ?
+              $.extend({}, this[field]) :
+              this[field];
 
-                this.__[field] = value;
+            this[field] = value;
 
-                if (this.model !== null) {
-                    this.model.trigger('update', this, field, value, oldValue);
-                }
+            if (this.model !== null) {
+                this.model.trigger('update', this, field, value, oldValue);
             }
-        });
+        }
     });
 }
 
@@ -1842,7 +1838,9 @@ var Node = function(parent, $el) {
         return new Node();
     }
 
-    Object.defineProperty(this, '__', { value: {}});
+    if (typeof this.__ == "undefined") {
+        this.__ = { value: {}};
+    }
 
     $el.data('queryBuilderModel', this);
 
@@ -1852,22 +1850,21 @@ var Node = function(parent, $el) {
     this.$el = $el;
     this.id = $el[0].id;
     this.model = null;
-    this.parent = parent;
+    this.setParent(parent);
 };
 
 defineModelProperties(Node, ['level', 'error', 'data']);
 
-Object.defineProperty(Node.prototype, 'parent', {
-    enumerable: true,
-    get: function() {
-        return this.__.parent;
-    },
-    set: function(value) {
-        this.__.parent = value;
-        this.level = value === null ? 1 : value.level+1;
-        this.model = value === null ? null : value.model;
-    }
-});
+Node.prototype.getParent = function() {
+    return this.__.parent;
+};
+
+Node.prototype.setParent = function(value) {
+    this.__.parent = value;
+    this.setLevel(value === null ? 1 : value.level+1);
+    this.model = value === null ? null : value.model;
+};
+
 
 /**
  * Check if this Node is the root
@@ -1899,8 +1896,8 @@ Node.prototype.drop = function() {
     }
 
     if (!this.isRoot()) {
-        this.parent._dropNode(this);
-        this.parent = null;
+        this.getParent()._dropNode(this);
+        this.setParent(null);
     }
 };
 
@@ -2013,7 +2010,7 @@ Group.prototype._addNode = function(node, index) {
     }
 
     this.rules.splice(index, 0, node);
-    node.parent = this;
+    node.setParent(this);
 
     if (this.model !== null) {
         this.model.trigger('add', node, index);
@@ -2318,7 +2315,7 @@ QueryBuilder.define('bt-checkbox', function(options) {
         var filter = rule.filter;
 
         if ((filter.input === 'radio' || filter.input === 'checkbox') && !filter.plugin) {
-            h.value = '';
+            h.setValue('');
 
             if (!filter.colors) {
                 filter.colors = {};
@@ -2397,11 +2394,11 @@ QueryBuilder.define('bt-tooltip-errors', function(options) {
 
     // add BT Tooltip data
     this.on('getRuleTemplate.filter', function(h) {
-        h.value = h.value.replace('class="error-container"', 'class="error-container" data-toggle="tooltip"');
+        h.setValue(h.value.replace('class="error-container"', 'class="error-container" data-toggle="tooltip"'));
     });
 
     this.on('getGroupTemplate.filter', function(h) {
-        h.value = h.value.replace('class="error-container"', 'class="error-container" data-toggle="tooltip"');
+        h.setValue(h.value.replace('class="error-container"', 'class="error-container" data-toggle="tooltip"'));
     });
 
     // init/refresh tooltip when title changes
@@ -2537,7 +2534,7 @@ QueryBuilder.defaults({
     mongoOperators: {
         equal:            function(v){ return v[0]; },
         not_equal:        function(v){ return {'$ne': v[0]}; },
-        in:               function(v){ return {'$in': v}; },
+        "in":             function(v){ return {'$in': v}; },
         not_in:           function(v){ return {'$nin': v}; },
         less:             function(v){ return {'$lt': v[0]}; },
         less_or_equal:    function(v){ return {'$lte': v[0]}; },
@@ -2617,7 +2614,7 @@ QueryBuilder.extend({
 
         return (function parse(data) {
             if (!data.condition) {
-                data.condition = that.settings.default_condition;
+                data.setCondition(that.settings.default_condition);
             }
             if (['AND', 'OR'].indexOf(data.condition.toUpperCase()) === -1) {
                 error('Unable to build MongoDB query with condition "{0}"', data.condition);
@@ -2644,7 +2641,7 @@ QueryBuilder.extend({
 
                     if (ope.nb_inputs !== 0) {
                         if (!(rule.value instanceof Array)) {
-                            rule.value = [rule.value];
+                            rule.setValue([rule.value]);
                         }
 
                         rule.value.forEach(function(v) {
@@ -2725,7 +2722,7 @@ QueryBuilder.extend({
 
             var res = {};
             if (parts.length > 0) {
-                res.condition = condition;
+                res.setCondition(condition);
                 res.rules = parts;
             }
             return res;
@@ -2879,14 +2876,14 @@ QueryBuilder.define('sortable', function(options) {
         if (level>1) {
             var $h = $(h.value);
             $h.find('.group-conditions').after('<div class="drag-handle"><i class="' + options.icon + '"></i></div>');
-            h.value = $h.prop('outerHTML');
+            h.setValue($h.prop('outerHTML'));
         }
     });
 
     this.on('getRuleTemplate.filter', function(h) {
         var $h = $(h.value);
         $h.find('.rule-header').after('<div class="drag-handle"><i class="' + options.icon + '"></i></div>');
-        h.value = $h.prop('outerHTML');
+        h.setValue($h.prop('outerHTML'));
     });
 }, {
     default_no_sortable: false,
@@ -2937,7 +2934,7 @@ QueryBuilder.defaults({
     sqlOperators: {
         equal:            { op: '= ?' },
         not_equal:        { op: '!= ?' },
-        in:               { op: 'IN(?)',     sep: ', ' },
+        "in":             { op: 'IN(?)',     sep: ', ' },
         not_in:           { op: 'NOT IN(?)', sep: ', ' },
         less:             { op: '< ?' },
         less_or_equal:    { op: '<= ?' },
@@ -3145,7 +3142,7 @@ QueryBuilder.extend({
 
         var sql = (function parse(data) {
             if (!data.condition) {
-                data.condition = that.settings.default_condition;
+                data.setCondition(that.settings.default_condition);
             }
             if (['AND', 'OR'].indexOf(data.condition.toUpperCase()) === -1) {
                 error('Unable to build SQL query with condition "{0}"', data.condition);
@@ -3172,7 +3169,7 @@ QueryBuilder.extend({
 
                     if (ope.nb_inputs !== 0) {
                         if (!(rule.value instanceof Array)) {
-                            rule.value = [rule.value];
+                            rule.setValue([rule.value]);
                         }
 
                         rule.value.forEach(function(v, i) {
@@ -3273,7 +3270,7 @@ QueryBuilder.extend({
                     curr = curr.rules[curr.rules.length-1];
                 }
 
-                curr.condition = data.operation.toUpperCase();
+                curr.setCondition(data.operation.toUpperCase());
                 i++;
 
                 // some magic !
